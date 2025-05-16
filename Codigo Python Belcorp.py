@@ -1,8 +1,13 @@
+# 0. Parámetros globales
+PERIODO = 202504   # Cambiar según el periodo deseado
+
 # 1. Importación de librerías
 import pandas as pd
 import numpy as np
 import sqlalchemy
 import urllib
+
+############################### CONSEGUIR ARCHIVO ######################################
 
 # 2. Conexión a la base de datos SQL
 sql_params = urllib.parse.quote_plus(
@@ -16,31 +21,28 @@ sql_params = urllib.parse.quote_plus(
 engine = sqlalchemy.create_engine(f"mssql+pyodbc:///?odbc_connect={sql_params}")
 
 # 3. Consulta a la tabla con los datos
-query = """
+query = f"""
 SELECT *
 FROM  [cnn_belcorp].[Connected].[Dashboard_Data]
-WHERE [Periodo] = 202504  -- Ajustá este filtro si es necesario
+WHERE [Periodo] = {PERIODO}
 """
 
 df = pd.read_sql(query, engine)
 
-# 4. Mapeo de marcas y normalización
+############################### NORMALIZACION DE DATOS ######################################
+
+# 4. Normalización de Nombre de Marcas
+
+# 4.1. Mapeo de Excepciones
 brand_map = {
-    "AVON": "Avon",
-    "CYZONE": "Cyzone",
     "ESIKA": "esika",
     "L'BEL": "L'BEL",
     "LOREAL": "L'Oreal",
     "L'OREAL": "L'Oreal",
-    "MARY KAY": "Mary Kay",
-    "MAYBELLINE": "Maybelline",
-    "NATURA": "Natura",
-    "NIVEA": "Nivea",
-    "PONDS": "Ponds",
-    "VOGUE": "Vogue",
-    "YANBAL": "Yanbal"
+    "MARY KAY": "Mary Kay"
 }
 
+# 4.2. Función Principal
 def normalizar_brand(brand):
     brand_upper = str(brand).strip().upper()
     if brand_upper in brand_map:
@@ -48,17 +50,52 @@ def normalizar_brand(brand):
     else:
         return str(brand).capitalize()
 
-# 5. Aplicar normalización
+# 4.3. Aplicar normalización
 df["Brand"] = df["Brand"].apply(normalizar_brand)
 
-# 6. Verificar resultados
+# 4.4. Verificar resultados
 print(df["Brand"].unique())
 df.head()
 
-- - - - - - - - - - - - - - - - - - - - - - - - - - - - - 
+# 5. Normalización del campo IsCompetitiveSet
 
-# Diccionario de normalización
-mapping = {
+# 5.1. Definición de marcas competitivas
+COMPETITIVE_BRANDS = {
+    'ANEW', 'AVON', 'CYZONE', 'ESIKA', 'HOMEM TATO (REG)', "L'BEL PARIS", "L`BEL",
+    "L'OREAL", 'L´OREAL', 'LBEL', 'LOREAL', 'LOREAL ACTIV', 'LOREAL AGE PERFECT',
+    'LOREAL PARIS', 'LOREAL PLENITUDE', 'LOREAL PROFESSIONNEL', 'LOREAL REVITALIFT',
+    'MARY KAY', 'MAYBELLINE', 'NATURA', 'NATURA (COSMETICOS)', 'NATURA COL',
+    'NIVEA', 'NIVEA (REG)', 'NIVEA BODY', 'NIVEA DEO', 'NIVEA EXT', 'NIVEA FOR MEN',
+    'NIVEA SUN', 'NIVEA VISAGE', 'NIVEA,FOR MEN,PRODUCTOS', 'PARIS,NAVIDAD LOREAL',
+    "POND´S", 'PONDS', 'REVITALIF', 'REVITALIFT', 'TOTAL BLOCK', 'UNIQUE',
+    'VOGUE', 'VOGUE (MAQUILLAJE)', 'VOGUE (REG)', 'YANBAL', 'YANBAL (REG)', 'YANBAL.COM'
+}
+
+# 5.2. Función Principal
+def actualizar_is_competitive_set(df: pd.DataFrame, periodo: int) -> pd.DataFrame:
+    if not {'IsCompetitiveSet', 'Periodo', 'Brand'}.issubset(df.columns):
+        raise ValueError("El DataFrame debe tener las columnas: IsCompetitiveSet, Periodo y Brand")
+
+    mask = (
+        (df['IsCompetitiveSet'] == 0) &
+        (df['Periodo'] == periodo) &
+        (df['Brand'].str.upper().isin(COMPETITIVE_BRANDS))
+    )
+    df.loc[mask, 'IsCompetitiveSet'] = 1
+    return df
+
+# 5.3. Aplicar Normalización
+df = actualizar_is_competitive_set(df, periodo=PERIODO)
+
+# 5.4. Verificación
+print(df["Brand"].unique())
+print(df["IsCompetitiveSet"].value_counts())
+df.head()
+
+# 6. Normalización del campo ADTYPE
+
+# 6.1. Mapeo según el campo Media y AdType
+adtype_map = {
     'MAGAZINESEMANARIOS' : 'ANUNCIO REGULAR',
 'MAGAZINEBANNER' : 'ANUNCIO REGULAR',
 'MAGAZINESIN DEFINIR' : 'ANUNCIO REGULAR',
@@ -294,10 +331,20 @@ mapping = {
 'OTVPUBLINOTAS' : 'ACCION ESPECIAL',
 }
 
+# 6.2. Función Principal
+def normalizar_adtype(row):
+    key = generar_clave_adtype(row)
+    return adtype_map.get(key, row['ADTYPE'])
 
-# Crear columna de combinación en mayúsculas
-df_normalizado['TV_AdType'] = (df_normalizado['Media'].astype(str) + df_normalizado['AdType'].astype(str)).str.upper()
+def generar_clave_adtype(row):
+    media = str(row['Media']).upper()
+    adtype = str(row['AdType']).upper()
+    clave = (media + adtype).replace(" ", "")
+    return clave
 
-# Aplicar el mapeo
-df_normalizado['AdType'] = df_normalizado['Media'].map(mapping).fillna(df_normalizado['AdType'])  # conserva AdType original si no hay mapeo
+# 6.3. Aplicar Normalización
+df['ADTYPE'] = df.apply(normalizar_adtype, axis=1)
 
+# 6.4. Verificar resultados
+print(df['ADTYPE'].value_counts())
+df.head()

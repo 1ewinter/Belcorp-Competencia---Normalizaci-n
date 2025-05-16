@@ -21,13 +21,20 @@ sql_params = urllib.parse.quote_plus(
 engine = sqlalchemy.create_engine(f"mssql+pyodbc:///?odbc_connect={sql_params}")
 
 # 3. Consulta a la tabla con los datos
-query = f"""
+query_dash_data = f"""
 SELECT *
 FROM  [cnn_belcorp].[Connected].[Dashboard_Data]
 WHERE [Periodo] = {PERIODO}
 """
 
-df = pd.read_sql(query, engine)
+query_trps = f"""
+SELECT *
+FROM  [cnn_belcorp].[Connected].[TRPs_Data]
+WHERE [Periodo] = {PERIODO}
+"""
+
+dash_data = pd.read_sql(query_dash_data, engine)
+trps_data = pd.read_sql(query_trps, engine)
 
 ############################### NORMALIZACION DE DATOS ######################################
 
@@ -51,11 +58,15 @@ def normalizar_brand(brand):
         return str(brand).capitalize()
 
 # 4.3. Aplicar normalización
-df["Brand"] = df["Brand"].apply(normalizar_brand)
+dash_data["Brand"] = dash_data["Brand"].apply(normalizar_brand)
+trps_data["Brand"] = trps_data["Brand"].apply(normalizar_brand)
 
 # 4.4. Verificar resultados
-print(df["Brand"].unique())
-df.head()
+print(dash_data["Brand"].unique())
+dash_data.head()
+
+print(trps_data["Brand"].unique())
+trps_data.head()
 
 # 5. Normalización del campo IsCompetitiveSet
 
@@ -84,12 +95,17 @@ def actualizar_is_competitive_set(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 # 5.3. Aplicar Normalización
-df = actualizar_is_competitive_set(df)
+dash_data = actualizar_is_competitive_set(dash_data)
+trps_data = actualizar_is_competitive_set(trps_data)
 
 # 5.4. Verificación
-print(df["Brand"].unique())
-print(df["IsCompetitiveSet"].value_counts())
-df.head()
+print(dash_data["Brand"].unique())
+print(dash_data["IsCompetitiveSet"].value_counts())
+dash_data.head()
+
+print(trps_data["Brand"].unique())
+print(trps_data["IsCompetitiveSet"].value_counts())
+trps_data.head()
 
 # 6. Normalización del campo ADTYPE
 
@@ -328,33 +344,37 @@ adtype_map = {
 'PTVMENCION-SOBIMP' : 'ACCION ESPECIAL',
 'PTVMENCION-SOBIMP' : 'ACCION ESPECIAL',
 'OTVPUBLINOTAS' : 'ACCION ESPECIAL',
+'OTVAUTOPROMOCION' : 'ANUNCIO REGULAR',
+'MAGAZINEADVERTORIAL' : 'ANUNCIO REGULAR'
 }
 
 # 6.2. Función Principal
-def normalizar_adtype(row):
-    key = generar_clave_adtype(row)
-    return adtype_map.get(key, row['ADTYPE'])
-
-def generar_clave_adtype(row):
-    media = str(row['Media']).upper()
+def normalizar_adtype(row, col_media):
+    media = str(row[col_media]).upper()
     adtype = str(row['AdType']).upper()
     clave = (media + adtype).replace(" ", "")
-    return clave
+    return adtype_map.get(clave, 'ANUNCIO REGULAR')
 
 # 6.3. Aplicar Normalización
-df['ADTYPE'] = df.apply(normalizar_adtype, axis=1)
+dash_data['ADTYPE'] = dash_data.apply(normalizar_adtype, axis=1, col_media='Media')
+trps_data['ADTYPE'] = trps_data.apply(normalizar_adtype, axis=1, col_media='TV_Type')
 
 # 6.4. Verificar resultados
-print(df['ADTYPE'].value_counts())
-df.head()
+print(dash_data['ADTYPE'].value_counts())
+dash_data.head()
+
+print(trps_data['ADTYPE'].value_counts())
+trps_data.head()
 
 ############################### MERCADOS SECUNDARIOS: NORMALIZACION
 
 PAISES = ['Costa Rica'] # Cambiar según el o los países deseados
 
-def actualizar_investment(df: pd.DataFrame, paises: list[str]) -> pd.DataFrame:
+def actualizar_investment(df: pd.DataFrame, paises: list[str], col_inversion: str) -> pd.DataFrame:
     mask = df['country'].isin(paises)
-    df.loc[mask, 'investment'] = df.loc[mask, '_Investment_Local_']
+    df.loc[mask, 'investment'] = df.loc[mask, col_inversion]
     return df
 
-df = actualizar_investment(df, PAISES)
+dash_data = actualizar_investment(dash_data, PAISES, '_Investment_Local_')
+trps_data = actualizar_investment(trps_data, PAISES, 'Inversion')
+

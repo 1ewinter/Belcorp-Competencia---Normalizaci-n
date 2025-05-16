@@ -72,20 +72,19 @@ COMPETITIVE_BRANDS = {
 }
 
 # 5.2. Función Principal
-def actualizar_is_competitive_set(df: pd.DataFrame, periodo: int) -> pd.DataFrame:
+def actualizar_is_competitive_set(df: pd.DataFrame) -> pd.DataFrame:
     if not {'IsCompetitiveSet', 'Periodo', 'Brand'}.issubset(df.columns):
         raise ValueError("El DataFrame debe tener las columnas: IsCompetitiveSet, Periodo y Brand")
 
     mask = (
         (df['IsCompetitiveSet'] == 0) &
-        (df['Periodo'] == periodo) &
         (df['Brand'].str.upper().isin(COMPETITIVE_BRANDS))
     )
     df.loc[mask, 'IsCompetitiveSet'] = 1
     return df
 
 # 5.3. Aplicar Normalización
-df = actualizar_is_competitive_set(df, periodo=PERIODO)
+df = actualizar_is_competitive_set(df)
 
 # 5.4. Verificación
 print(df["Brand"].unique())
@@ -348,3 +347,14 @@ df['ADTYPE'] = df.apply(normalizar_adtype, axis=1)
 # 6.4. Verificar resultados
 print(df['ADTYPE'].value_counts())
 df.head()
+
+############################### MERCADOS SECUNDARIOS: NORMALIZACION
+
+PAISES = ['Costa Rica'] # Cambiar según el o los países deseados
+
+def actualizar_investment(df: pd.DataFrame, paises: list[str]) -> pd.DataFrame:
+    mask = df['country'].isin(paises)
+    df.loc[mask, 'investment'] = df.loc[mask, '_Investment_Local_']
+    return df
+
+df = actualizar_investment(df, PAISES)
